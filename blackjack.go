@@ -64,7 +64,7 @@ func contains(s []card, e card) bool {
 func drawCard(drawnCards *[]card, player string, visible bool) card {
 
 	newCard := card{rand.IntN(13) + 1, rand.IntN(4)}
-	time.Sleep(1 * time.Second)
+	time.Sleep(500 * time.Millisecond)
 
 	for {
 		newCard := card{rand.IntN(13) + 1, rand.IntN(4)}
@@ -73,9 +73,9 @@ func drawCard(drawnCards *[]card, player string, visible bool) card {
 			break
 		}
 	}
-	if player == "dealer"{
-		if visible{
-					fmt.Println("The dealer has drawn a", newCard.name(), "of", newCard.suit())
+	if player == "dealer" {
+		if visible {
+			fmt.Println("The dealer has drawn a", newCard.name(), "of", newCard.suit())
 		} else {
 			fmt.Println("The dealer has drawn a card")
 		}
@@ -83,7 +83,7 @@ func drawCard(drawnCards *[]card, player string, visible bool) card {
 		fmt.Println("You have drawn a", newCard.name(), "of", newCard.suit())
 
 	}
-	
+
 	return newCard
 }
 
@@ -94,7 +94,7 @@ func playDealersHand(dealerCards *[]card, drawnCards *[]card) int {
 	fmt.Println("Dealer revels their second card as", cards[1].name(), "of", cards[1].suit())
 
 	dealerTotal := calculateTotal(*dealerCards)
-	for !stick{
+	for !stick {
 		if dealerTotal > 17 {
 			stick = true
 		} else {
@@ -102,80 +102,116 @@ func playDealersHand(dealerCards *[]card, drawnCards *[]card) int {
 			dealerTotal += newCard.value()
 		}
 	}
-	
+
 	return dealerTotal
 
 }
 
-func determineWinner(dealerTotal int, playerTotal int) {
-	winner := ""
-
-	if dealerTotal > 21 {
-		fmt.Printf("Dealer goes bust on: %d", dealerTotal)
-	} else if playerTotal > 21 {
-		fmt.Printf("Player goes bust on: %d", playerTotal)
-	} else {
-		if dealerTotal > playerTotal {
-			winner = "Dealer"
-		} else if dealerTotal < playerTotal {
-			winner = "Player"
-		} else {
-			winner = "No one"
-		}
-	}
-
-	fmt.Printf("%s wins! Dealer: %d, player: %d", winner, dealerTotal, playerTotal)
+func determineWinner(dealerTotal int, playerTotal int) bool {
+	return playerTotal <= 21 && playerTotal > dealerTotal || dealerTotal > 21
 }
 
 func calculateTotal(cards []card) int {
 	total := 0
-	for _, card := range cards{
+	for _, card := range cards {
 		total += card.value()
 	}
 	return total
 }
 
+func getUserBet(remainingChips int) int {
+	validBet := false
+	bet := 0
+	for !validBet {
+		scanner := bufio.NewScanner(os.Stdin)
+		fmt.Printf("How much would you like to bet? Remaining chips: %d\n", remainingChips)
+		scanner.Scan()
+		testBet, err := strconv.Atoi(scanner.Text())
+		if err != nil || testBet > remainingChips {
+			fmt.Printf("Invalid input! Please input a whole number below %d\n", remainingChips)
+		} else {
+			validBet = true
+			bet = testBet
+		}
+
+	}
+	return bet
+}
 
 func main() {
 
-	
 	var drawnCards []card
 	var playerCards []card
 	var dealerCards []card
+	playing := true
 
-	playerTotal := 0
+	chipsTotal := 1000
 
-	playerCards = append(playerCards, drawCard(&drawnCards,"player", true))
-	dealerCards = append(dealerCards, drawCard(&drawnCards,"dealer", true))
-	playerCards = append(playerCards, drawCard(&drawnCards,"player", true))
-	dealerCards = append(dealerCards, drawCard(&drawnCards,"dealer", false))
+	for playing {
+		playerTotal := 0
+		playerCards = nil
+		dealerCards = nil
 
-	playerTotal = calculateTotal(playerCards)
+		bet := getUserBet(chipsTotal)
 
+		playerCards = append(playerCards, drawCard(&drawnCards, "player", true))
+		dealerCards = append(dealerCards, drawCard(&drawnCards, "dealer", true))
+		playerCards = append(playerCards, drawCard(&drawnCards, "player", true))
+		dealerCards = append(dealerCards, drawCard(&drawnCards, "dealer", false))
 
-	for playerTotal < 22{
-		fmt.Println("Current total", playerTotal)
+		playerTotal = calculateTotal(playerCards)
 
-		options := "hit, stand"
-		scanner := bufio.NewScanner(os.Stdin)
-		if playerCards[0].cardIndex == playerCards[1].cardIndex {
-			options += ", split"
+		for playerTotal < 22 {
+			fmt.Printf("Current total: %d \n", playerTotal)
+
+			options := "hit, stand"
+			scanner := bufio.NewScanner(os.Stdin)
+			if playerCards[0].cardIndex == playerCards[1].cardIndex {
+				options += ", split"
+			}
+			fmt.Printf("Would you like to %s? ", options)
+			scanner.Scan()
+			text := scanner.Text()
+			if text == "hit" {
+				newCard := drawCard(&drawnCards, "player", true)
+				playerTotal += newCard.value()
+			} else if text == "stand" {
+				fmt.Printf("You stand on %d\n", playerTotal)
+				time.Sleep(500 * time.Millisecond)
+				dealerTotal := playDealersHand(&dealerCards, &drawnCards)
+				time.Sleep(1 * time.Second)
+
+				if determineWinner(dealerTotal, playerTotal) {
+					fmt.Printf("The player has won with %d, over dealers %d\n", playerTotal, dealerTotal)
+					chipsTotal += bet
+				} else {
+					fmt.Printf("The dealer has won with %d, over players %d\n", dealerTotal, playerTotal)
+					chipsTotal -= bet
+				}
+				break
+			}
 		}
-		fmt.Printf("Would you like to %s? ", options)
-		scanner.Scan()
-		text := scanner.Text()
-		if text == "hit" {
-			newCard := drawCard(&drawnCards, "player", true)
-			playerTotal += newCard.value()
-		} else if text == "stand" {
-			fmt.Printf("You stand on %d\n", playerTotal)
-			dealerTotal := playDealersHand(&dealerCards, &drawnCards)
-
-			determineWinner(dealerTotal, playerTotal)
-			break
+		if playerTotal > 21 {
+			time.Sleep(500 * time.Millisecond)
+			fmt.Printf("You went bust on %d. Better luck next time\n", playerTotal)
+			chipsTotal -= bet
 		}
-	}
-	if playerTotal > 21{
-		fmt.Printf("You went bust on %d. Better luck next time", playerTotal)
+		fmt.Printf("You now have %d chips left\n", chipsTotal)
+		time.Sleep(1000 * time.Millisecond)
+
+		if chipsTotal > 0 {
+			fmt.Printf("Would you like to play again?\n")
+			scanner := bufio.NewScanner(os.Stdin)
+			scanner.Scan()
+			ans := scanner.Text()
+			if ans != "yes" {
+				playing = false
+			}
+
+		} else {
+			fmt.Println("Sorry, you've run out of money :(")
+			os.Exit(0)
+		}
+
 	}
 }
